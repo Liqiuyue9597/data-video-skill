@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>认知革命 V2 · The Cognitive Revolution</title>
+<style>
+  :root{
+    --bg:#0a0a0f;
+    --fg:#eceae4;
+    --dim:#8a8a90;
+    --dimmer:#55555c;
+    --gold:#d4a85a;
+    --red:#c15b4e;
+    --serif:'EB Garamond','Playfair Display','Noto Serif SC',Georgia,serif;
+    --sans:'Inter','Helvetica Neue','PingFang SC','Noto Sans SC',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+            font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  #stage{position:fixed;inset:0;cursor:none}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  /* ============ THE SPINE: persistent equation top-right ============ */
+  /* W = M × C , stays on-screen from 00:30 to 04:00, with each term
+     capable of being highlighted independently. */
+  .spine{
+    position:absolute;top:5.5%;right:6%;
+    font-family:var(--sans);font-weight:300;letter-spacing:.08em;
+    font-size:1.4rem;color:var(--dim);
+    opacity:0;transition:opacity 1.4s cubic-bezier(.4,0,.2,1);
+    pointer-events:none;line-height:1.1;text-align:right;
+  }
+  .spine.on{opacity:1}
+  .spine .eq{font-family:var(--sans);font-size:1.5rem;letter-spacing:.12em}
+  .spine .term{color:var(--dim);transition:color 1s cubic-bezier(.4,0,.2,1),
+               text-shadow 1s cubic-bezier(.4,0,.2,1)}
+  .spine .term.lit{color:var(--gold);text-shadow:0 0 18px rgba(212,168,90,.3)}
+  .spine .term.done{color:var(--fg)}
+  .spine .footnote{display:block;margin-top:.5em;color:var(--dimmer);
+                   font-size:.75rem;letter-spacing:.3em}
+
+  /* ============ chapter label top-left ============ */
+  .chapter{
+    position:absolute;top:5.5%;left:6%;
+    font-family:var(--sans);font-weight:300;letter-spacing:.3em;
+    font-size:1rem;color:var(--dim);
+    opacity:0;transition:opacity 1.2s cubic-bezier(.4,0,.2,1);
+    pointer-events:none;
+  }
+  .chapter.on{opacity:1}
+
+  /* ============ subtitle narration bottom center ============ */
+  .sub{
+    position:absolute;left:8%;right:8%;bottom:11%;
+    text-align:center;font-family:var(--sans);
+    font-size:1.2rem;letter-spacing:.08em;line-height:1.7;
+    color:var(--fg);font-weight:300;
+    opacity:0;transform:translateY(8px);
+    transition:opacity 1s cubic-bezier(.4,0,.2,1),transform 1s cubic-bezier(.4,0,.2,1);
+    text-shadow:0 0 20px rgba(0,0,0,.9);
+    pointer-events:none;
+  }
+  .sub.on{opacity:.95;transform:translateY(0)}
+  .sub em{font-style:normal;color:var(--gold);font-weight:400}
+  .sub b{color:var(--gold);font-weight:500}
+
+  /* ============ academic citation ============ */
+  .cite{
+    position:absolute;left:6%;bottom:17%;
+    font-family:var(--sans);font-weight:300;letter-spacing:.1em;
+    font-size:1rem;color:var(--dim);opacity:0;
+    transition:opacity 1.2s cubic-bezier(.4,0,.2,1);
+    pointer-events:none;
+  }
+  .cite.on{opacity:.75}
+
+  /* ============ opening / closing mega text ============ */
+  .mega{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:1.3em;padding:0 10%;text-align:center;
+    opacity:0;transition:opacity 1.6s cubic-bezier(.4,0,.2,1);pointer-events:none;
+  }
+  .mega.on{opacity:1}
+  .mega .line{
+    font-family:var(--sans);font-weight:300;font-size:2rem;letter-spacing:.1em;line-height:1.6;
+  }
+  .mega .line em{font-style:normal;color:var(--gold);font-weight:400}
+
+  /* ============ ANSWER list — three-item payoff ============ */
+  .answer{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    gap:5vw;padding:0 10%;opacity:0;transition:opacity 1.6s cubic-bezier(.4,0,.2,1);
+    pointer-events:none;
+  }
+  .answer.on{opacity:1}
+  .answer .item{
+    display:flex;flex-direction:column;align-items:center;gap:1.2em;
+    opacity:0;transform:translateY(14px);
+    transition:opacity 1s cubic-bezier(.4,0,.2,1),transform 1s cubic-bezier(.4,0,.2,1);
+    min-width:16vw;max-width:22vw;
+  }
+  .answer .item.show{opacity:1;transform:translateY(0)}
+  .answer .item .top{font-family:var(--sans);font-weight:300;letter-spacing:.3em;
+                     font-size:.95rem;color:var(--dim);text-transform:uppercase}
+  .answer .item .glyph{font-family:var(--serif);font-size:5rem;color:var(--gold);
+                       line-height:1;font-weight:400}
+  .answer .item .label{font-family:var(--sans);font-size:1.5rem;
+                       letter-spacing:.1em;color:var(--fg);font-weight:400}
+  .answer .item .caption{font-family:var(--sans);font-size:1rem;
+                         letter-spacing:.08em;color:var(--dim);line-height:1.6;
+                         text-align:center;font-weight:300;max-width:14em}
+
+  /* ============ UI chrome ============ */
+  #progress{position:absolute;left:0;right:0;bottom:0;height:1px;
+            background:rgba(255,255,255,.05)}
+  #progress .fill{height:100%;width:0%;background:var(--gold);opacity:.35;
+                  transition:width .2s linear}
+
+  /* ============ speed control (bottom-right, draggable) ============ */
+  #speedCtl{
+    position:absolute;right:16px;bottom:16px;z-index:50;
+    display:flex;align-items:center;gap:10px;
+    padding:8px 14px;border:1px solid rgba(255,255,255,.1);
+    background:rgba(10,10,15,.65);border-radius:999px;
+    font-family:var(--sans);font-size:.75rem;color:var(--dim);
+    letter-spacing:.1em;user-select:none;
+    opacity:0;transition:opacity .4s;
+  }
+  #speedCtl.show{opacity:.95}
+  #speedCtl:hover{opacity:1;border-color:rgba(212,168,90,.3)}
+  #speedCtl label{color:var(--dim);text-transform:uppercase;letter-spacing:.2em}
+  #speedCtl input[type=range]{
+    -webkit-appearance:none;appearance:none;
+    width:140px;height:3px;background:rgba(255,255,255,.12);
+    border-radius:2px;outline:none;cursor:pointer;
+  }
+  #speedCtl input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:12px;height:12px;border-radius:50%;background:var(--gold);
+    cursor:grab;transition:transform .15s;
+  }
+  #speedCtl input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.3)}
+  #speedCtl input[type=range]::-moz-range-thumb{
+    width:12px;height:12px;border-radius:50%;background:var(--gold);
+    cursor:grab;border:none;
+  }
+  #speedVal{color:var(--gold);font-variant-numeric:tabular-nums;
+            min-width:3em;text-align:right}
+  #play{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(10,10,15,.92);z-index:100;cursor:pointer;
+    font-family:var(--sans);color:var(--dim);letter-spacing:.3em;
+    font-size:.95rem;text-transform:uppercase;flex-direction:column;
+    transition:opacity .8s;
+  }
+  #play.hidden{opacity:0;pointer-events:none}
+  #play .btn{
+    width:120px;height:120px;border:1px solid var(--dim);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:1.5em;transition:all .4s;
+  }
+  #play:hover .btn{border-color:var(--gold);transform:scale(1.05)}
+  #play .btn::after{
+    content:'';border-style:solid;border-width:14px 0 14px 22px;
+    border-color:transparent transparent transparent var(--dim);
+    margin-left:6px;transition:border-color .4s;
+  }
+  #play:hover .btn::after{border-left-color:var(--gold)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv"></canvas>
+
+  <!-- top-left chapter -->
+  <div id="chapter" class="chapter"></div>
+
+  <!-- top-right PERSISTENT SPINE equation -->
+  <div id="spine" class="spine">
+    <div class="eq">
+      <span class="term" data-term="work">工作</span>
+      <span style="margin:0 .4em">=</span>
+      <span class="term" data-term="muscle">肌肉</span>
+      <span style="margin:0 .4em" class="term" data-term="mult">×</span>
+      <span class="term" data-term="mind">心智</span>
+    </div>
+    <span class="footnote">原文 · KONSTANTINE</span>
+  </div>
+
+  <div id="sub" class="sub"></div>
+  <div id="cite" class="cite"></div>
+  <div id="mega" class="mega"><div class="line" id="megaLine"></div></div>
+
+  <!-- answer: three-item list -->
+  <div id="answer" class="answer">
+    <div class="item" data-i="0">
+      <div class="top">01</div>
+      <div class="glyph">速</div>
+      <div class="label">速度</div>
+      <div class="caption">这一次只给你五年。<br>学得够不够快？</div>
+    </div>
+    <div class="item" data-i="1">
+      <div class="top">02</div>
+      <div class="glyph">位</div>
+      <div class="label">位置</div>
+      <div class="caption">你站在哪一侧？<br>外包别人，还是被外包？</div>
+    </div>
+    <div class="item" data-i="2">
+      <div class="top">03</div>
+      <div class="glyph">忍</div>
+      <div class="label">耐心</div>
+      <div class="caption">赢家可能是你孙辈。<br>你愿意再等一代人吗？</div>
+    </div>
+  </div>
+
+  <div id="progress"><div class="fill" id="pfill"></div></div>
+
+  <div id="speedCtl">
+    <label>SPEED</label>
+    <input type="range" id="speedRange" min="0.5" max="3.0" step="0.05" value="1.6">
+    <span id="speedVal">1.6×</span>
+  </div>
+
+  <div id="play">
+    <div class="btn"></div>
+    <div>Press to begin · 点击开始</div>
+  </div>
+</div>
+
+<script>
+/* =============================================================
+   V2 — single-skeleton explainer
+   Spine equation stays on-screen 0:30 – 4:00.
+   Only 3 canvas scenes, each evolving over long stretches.
+============================================================= */
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function fontPx(sizeAt1920){
+  const scale = Math.max(0.75, Math.min(1.6, W/1920));
+  return Math.round(sizeAt1920 * scale);
+}
+function resize(){
+  W=cv.clientWidth=window.innerWidth;
+  H=cv.clientHeight=window.innerHeight;
+  cv.width=W*DPR;cv.height=H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);resize();
+
+/* ========== particle field (opening + closing only) ========== */
+const GRID_X=120, GRID_Z=36;
+const particles=[];
+for(let z=0;z<GRID_Z;z++) for(let x=0;x<GRID_X;x++){
+  particles.push({
+    u:(x/(GRID_X-1))-0.5, v:(z/(GRID_Z-1)),
+    jitter:(Math.random()-.5)*.6, phase:Math.random()*Math.PI*2,
+  });
+}
+
+/* ========== scene state ========== */
+const scene = {
+  mode:'dark',    // 'dark' | 'field' | 'graph' | 'bars' | 'answer'
+  waveAmp:0, waveSpeed:0.6,
+  // GRAPH scene — evolves across the entire middle (0:30 → 3:10)
+  curveMuscle:0,     // 0..1 white curve progress
+  curveMind:0,       // 0..1 gold curve progress
+  curveMult:0,       // 0..1 fade of "× area" shaded zone
+  // BARS scene — grows directly out of the graph area (3:10 onwards)
+  barsT:0,           // 0..1 bars rise, representing distribution of outcomes
+  // transition
+  blackout:0,
+};
+
+/* ========== tween + blink helpers ========== */
+const tweens=[];
+function tween(key,from,to,durSec){
+  tweens.push({key,from,to,dur:durSec,start:elapsed()});
+}
+function updateTweens(){
+  const now=elapsed();
+  for(let i=tweens.length-1;i>=0;i--){
+    const tw=tweens[i];
+    const k=Math.min(1,(now-tw.start)/tw.dur);
+    const eased=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    scene[tw.key]=tw.from+(tw.to-tw.from)*eased;
+    if(k>=1)tweens.splice(i,1);
+  }
+}
+function sceneBlink(cb, {dark=0.45, hold=0.08, light=0.5}={}){
+  tween('blackout', 0, 1, dark);
+  setTimeout(()=>{ try{cb&&cb();}catch(e){console.error(e);}
+    tween('blackout', 1, 0, light);
+  }, (dark+hold)*1000);
+}
+
+/* ========== draw loop ========== */
+let t0=0;
+function draw(ts){
+  if(!t0)t0=ts;
+  const t=(ts-t0)/1000;
+
+  ctx.fillStyle='#0a0a0f';
+  ctx.fillRect(0,0,W,H);
+
+  // vignette
+  const grad=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.25,W/2,H/2,Math.max(W,H)*.75);
+  grad.addColorStop(0,'rgba(10,10,15,0)');
+  grad.addColorStop(1,'rgba(0,0,0,.85)');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+
+  const cx=W/2, horizon=H*0.55;
+  const camBreath=Math.sin(t*0.14)*6, camSway=Math.sin(t*0.09)*4;
+
+  if(scene.mode==='field'){
+    for(const p of particles){
+      const depth=1-p.v;
+      const y = horizon + (H*0.55)*(1-depth) + camBreath*(1-depth);
+      const xSpread = W*(0.55 - depth*0.45);
+      const x = cx + p.u*xSpread*2 + p.jitter*(1-depth)*8 + camSway*(1-depth);
+      const wave=Math.sin(t*scene.waveSpeed + p.phase + p.u*6)*scene.waveAmp*(1-depth)*40;
+      const size=.9 + depth*1.3;
+      const alpha=0.15 + depth*0.75;
+      ctx.fillStyle=`rgba(236,234,228,${alpha})`;
+      ctx.fillRect(x-size/2, y+wave-size/2, size, size);
+    }
+  }
+
+  if(scene.mode==='graph'){
+    drawGraph(t);
+  }
+
+  if(scene.mode==='bars'){
+    drawBars(t);
+  }
+
+  // transition overlay
+  if(scene.blackout>0){
+    ctx.fillStyle=`rgba(10,10,15,${scene.blackout})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  pfill.style.width=(elapsed()/TOTAL*100)+'%';
+  requestAnimationFrame(draw);
+}
+
+/* ========== THE GRAPH SCENE — stays on screen for ~2:40 ==========
+   Two time-anchor curves. White = muscle (already risen).
+   Gold = mind (rising now). When both are up, the shaded area
+   between them represents the MULTIPLICATION (× in the equation). */
+function drawGraph(t){
+  const left=W*.14, right=W*.86;
+  const baseY=H*.78, topY=H*.26;
+
+  // axis
+  ctx.strokeStyle='rgba(236,234,228,.15)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(left,baseY);ctx.lineTo(right,baseY);ctx.stroke();
+
+  // time ticks
+  const ticks=[
+    {u:0.00,label:'1700'},
+    {u:0.33,label:'1900'},
+    {u:0.66,label:'现在'},
+    {u:1.00,label:'未来'},
+  ];
+  ctx.fillStyle='rgba(236,234,228,.6)';
+  ctx.font=`300 ${fontPx(18)}px -apple-system,"PingFang SC",sans-serif`;
+  ctx.textAlign='center';
+  for(const tk of ticks){
+    const x=left+(right-left)*tk.u;
+    ctx.strokeStyle='rgba(236,234,228,.15)';
+    ctx.beginPath();ctx.moveTo(x,baseY);ctx.lineTo(x,baseY+8);ctx.stroke();
+    ctx.fillText(tk.label, x, baseY+30);
+  }
+
+  // right-side y-axis labels
+  ctx.textAlign='left';
+  ctx.fillStyle='rgba(236,234,228,.5)';
+  ctx.font=`300 ${fontPx(16)}px -apple-system,"PingFang SC",sans-serif`;
+  ctx.fillText('← 由人', right+14, baseY-4);
+  ctx.fillText('← 由机器', right+14, topY+8);
+
+  // Muscle curve — rises from u≈0.28 (1800), near-top by "现在"
+  if(scene.curveMuscle>0){
+    plotCurve({left,right,baseY,topY, progress:scene.curveMuscle,
+               flatUntil:0.28, exp:2.0,
+               color:'#eceae4', width:1.8, label:'肌肉',
+               labelOffsetY:28, pulseAt:'end'});
+  }
+
+  // Mind curve — rises from u≈0.60 ("现在"), much steeper
+  if(scene.curveMind>0){
+    // use topY-30 so the mind curve ends above the muscle curve
+    plotCurve({left,right,baseY,topY:topY-30, progress:scene.curveMind,
+               flatUntil:0.60, exp:1.5,
+               color:'#d4a85a', width:2.2, label:'心智',
+               labelOffsetY:-30, pulseAt:'end'});
+  }
+
+  // ========= THE × — shaded area between the two curves =========
+  // When both curves are present, fill the band between them.
+  // This visualizes the MULTIPLICATION in Work = Muscle × Mind.
+  if(scene.curveMult>0){
+    const a = scene.curveMult * 0.18;
+    const segs=200;
+    ctx.beginPath();
+    // top: mind curve
+    for(let i=0;i<=segs;i++){
+      const u=i/segs;
+      const x=left+(right-left)*u;
+      const y=curveY({baseY,topY:topY-30,flatUntil:0.60,exp:1.5,u});
+      if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    }
+    // bottom: muscle curve (reversed)
+    for(let i=segs;i>=0;i--){
+      const u=i/segs;
+      const x=left+(right-left)*u;
+      const y=curveY({baseY,topY,flatUntil:0.28,exp:2.0,u});
+      ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    const g=ctx.createLinearGradient(0,topY,0,baseY);
+    g.addColorStop(0,`rgba(212,168,90,${a*1.3})`);
+    g.addColorStop(1,`rgba(236,234,228,${a*0.4})`);
+    ctx.fillStyle=g;
+    ctx.fill();
+
+    // × marker at center of the band
+    const uMid=0.78;
+    const yTop=curveY({baseY,topY:topY-30,flatUntil:0.60,exp:1.5,u:uMid});
+    const yBot=curveY({baseY,topY,flatUntil:0.28,exp:2.0,u:uMid});
+    const xMid=left+(right-left)*uMid;
+    const yMid=(yTop+yBot)/2;
+    const alpha = Math.max(0, scene.curveMult - 0.3);
+    ctx.fillStyle=`rgba(212,168,90,${alpha*0.9})`;
+    ctx.font=`300 ${fontPx(60)}px serif`;
+    ctx.textAlign='center';
+    ctx.fillText('×', xMid, yMid+16);
+  }
+  ctx.textAlign='left';
+}
+
+function curveY({baseY,topY,flatUntil,exp,u}){
+  if(u<flatUntil) return baseY-2;
+  const k=(u-flatUntil)/(1-flatUntil);
+  return baseY-(baseY-topY)*Math.pow(k,exp);
+}
+
+function plotCurve({left,right,baseY,topY,progress,flatUntil,exp,color,width,label,labelOffsetY,pulseAt}){
+  const segs=200;
+  ctx.beginPath();
+  ctx.strokeStyle=color;
+  ctx.lineWidth=width;
+  for(let i=0;i<=segs*progress;i++){
+    const u=i/segs;
+    const x=left+(right-left)*u;
+    const y=curveY({baseY,topY,flatUntil,exp,u});
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // head
+  const u=progress;
+  const x=left+(right-left)*u;
+  const y=curveY({baseY,topY,flatUntil,exp,u});
+  const tNow=performance.now()/1000;
+  const pulse=0.6+Math.sin(tNow*2.4)*0.4;
+  ctx.fillStyle=color+'ee';
+  ctx.beginPath();ctx.arc(x,y, 3+pulse*1.4, 0, Math.PI*2);ctx.fill();
+  ctx.fillStyle=color+'33';
+  ctx.beginPath();ctx.arc(x,y, 10+pulse*8, 0, Math.PI*2);ctx.fill();
+
+  // label follows head
+  if(label && progress>0.3){
+    ctx.fillStyle=color + (color.length===7?'cc':'cc');
+    ctx.font=`300 ${fontPx(22)}px -apple-system,"PingFang SC",sans-serif`;
+    ctx.textAlign='right';
+    ctx.fillText(label, x-10, y+(labelOffsetY||0));
+  }
+}
+
+/* ========== BARS SCENE — distribution of outcomes ==========
+   The point of this scene: when both muscle and mind compound,
+   total output explodes, BUT the distribution is fat-tailed.
+   Most people stay flat; a few shoot up. (= Engels' pause) */
+function drawBars(t){
+  const left=W*.14, right=W*.86;
+  const baseY=H*.78;
+  const nBars=72;
+  const barW=(right-left)/nBars*0.6;
+  const gap=(right-left)/nBars*0.4;
+
+  // axis
+  ctx.strokeStyle='rgba(236,234,228,.15)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(left,baseY);ctx.lineTo(right,baseY);ctx.stroke();
+
+  // generate heights — log-normal-ish: most short, few very tall
+  // seeded deterministic
+  const heights=[];
+  for(let i=0;i<nBars;i++){
+    const seed=Math.sin(i*12.9898)*43758.5453;
+    const r=seed-Math.floor(seed);
+    // most values near 0.15, with a long tail
+    const base=0.15 + Math.pow(r,8)*0.85;
+    heights.push(base);
+  }
+
+  const maxH=(baseY-H*.22);
+  const totalT=scene.barsT;
+  for(let i=0;i<nBars;i++){
+    const u=i/(nBars-1);
+    // bars appear left-to-right as totalT grows
+    const barProgress=Math.max(0, Math.min(1, (totalT - u*0.3)/0.7));
+    if(barProgress<=0) continue;
+    const h = heights[i]*maxH*barProgress;
+    const x = left + i*(barW+gap);
+    const tall = heights[i]>0.65;
+    ctx.fillStyle = tall ? `rgba(212,168,90,${0.4+barProgress*0.55})`
+                         : `rgba(236,234,228,${0.15+barProgress*0.35})`;
+    ctx.fillRect(x, baseY-h, barW, h);
+  }
+
+  // overlay annotations when nearly complete
+  if(totalT>0.75){
+    const a=Math.min(1,(totalT-0.75)*4);
+    // ~10% of bars are tall
+    const tallCount = heights.filter(h=>h>0.65).length;
+    const pct = Math.round(tallCount/nBars*100);
+
+    ctx.fillStyle=`rgba(212,168,90,${a})`;
+    ctx.font=`400 ${fontPx(42)}px serif`;
+    ctx.textAlign='left';
+    ctx.fillText(`约 ${pct}%`, left, H*.24);
+    ctx.font=`300 ${fontPx(18)}px -apple-system,"PingFang SC",sans-serif`;
+    ctx.fillStyle=`rgba(212,168,90,${a*.75})`;
+    ctx.fillText('赶上了这场革命', left, H*.24+32);
+
+    ctx.fillStyle=`rgba(236,234,228,${a*.9})`;
+    ctx.font=`400 ${fontPx(42)}px serif`;
+    ctx.textAlign='right';
+    ctx.fillText(`约 ${100-pct}%`, right, H*.24);
+    ctx.font=`300 ${fontPx(18)}px -apple-system,"PingFang SC",sans-serif`;
+    ctx.fillStyle=`rgba(236,234,228,${a*.55})`;
+    ctx.fillText('没有', right, H*.24+32);
+  }
+  ctx.textAlign='left';
+}
+
+/* ============================================================
+   UI setters + SPINE control
+============================================================ */
+const chapterEl=document.getElementById('chapter');
+const spineEl  =document.getElementById('spine');
+const subEl    =document.getElementById('sub');
+const citeEl   =document.getElementById('cite');
+const megaEl   =document.getElementById('mega');
+const megaLine =document.getElementById('megaLine');
+const answerEl =document.getElementById('answer');
+const pfill    =document.getElementById('pfill');
+
+function setChapter(cn){
+  if(!cn){chapterEl.classList.remove('on');return;}
+  chapterEl.textContent=cn;
+  chapterEl.classList.add('on');
+  if(typeof chimeHit==='function') chimeHit('chord');
+}
+function setSub(html){
+  if(!html){subEl.classList.remove('on');return;}
+  subEl.innerHTML=html;
+  void subEl.offsetWidth;
+  subEl.classList.add('on');
+}
+function setCite(html){
+  if(!html){citeEl.classList.remove('on');return;}
+  citeEl.innerHTML=html;
+  citeEl.classList.add('on');
+}
+function setMega(html){
+  if(!html){megaEl.classList.remove('on');return;}
+  megaLine.innerHTML=html;
+  megaEl.classList.add('on');
+  if(typeof chimeHit==='function') chimeHit('swell');
+}
+
+/* ----- the SPINE: show/hide, and highlight individual terms ----- */
+function showSpine(){ spineEl.classList.add('on'); }
+function hideSpine(){ spineEl.classList.remove('on'); }
+function litTerm(name){
+  // mark one term "lit" (gold); keep already-lit ones in "done" state (white)
+  for(const el of spineEl.querySelectorAll('.term')){
+    if(el.classList.contains('lit')){
+      el.classList.remove('lit'); el.classList.add('done');
+    }
+  }
+  if(name){
+    const el = spineEl.querySelector(`.term[data-term="${name}"]`);
+    if(el){ el.classList.add('lit'); }
+    if(typeof chimeHit==='function') chimeHit('strike');
+  }
+}
+function unlitAll(){
+  for(const el of spineEl.querySelectorAll('.term')){
+    el.classList.remove('lit'); el.classList.remove('done');
+  }
+}
+
+/* ----- answer list ----- */
+function showAnswerItem(i){
+  const el = answerEl.querySelector(`.item[data-i="${i}"]`);
+  if(el){
+    answerEl.classList.add('on');
+    el.classList.add('show');
+    if(typeof chimeHit==='function') chimeHit('strike');
+  }
+}
+function hideAnswer(){
+  answerEl.classList.remove('on');
+  for(const el of answerEl.querySelectorAll('.item')) el.classList.remove('show');
+}
+
+/* ============================================================
+   TIMELINE — cues array
+   SPEED applied globally. Keep this list dense in annotations
+   because the structure IS the design.
+============================================================ */
+const TOTAL = 300; // ~5min at SPEED=1
+let SPEED = 1.6;   // live-adjustable via UI
+let startAt = null;
+let accumElapsed = 0;      // seconds of "video time" already consumed
+let lastWallClock = null;  // last real-world tick, in ms
+function elapsed(){
+  if(startAt==null) return 0;
+  const now = performance.now();
+  if(lastWallClock!=null){
+    accumElapsed += ((now - lastWallClock)/1000) * SPEED;
+  }
+  lastWallClock = now;
+  return accumElapsed;
+}
+
+const cues=[
+  // ============ HOOK · 0:00 – 0:30 ============
+  [0.0,  ()=>{ scene.mode='dark';
+               setMega('每天早上，你坐进一辆<br>没有司机的车。'); }],
+  [8.0,  ()=>{ setMega('它替你出力。<br>也替你<em>思考</em>。'); }],
+  [16.0, ()=>{ setMega('两样东西，都被<em>外包</em>了。'); }],
+  [24.0, ()=>{ setMega(''); sceneBlink(()=>{
+                 scene.mode='field'; tween('waveAmp',0,.4,3); }); }],
+
+  // ============ EQUATION REVEAL · 0:30 ============
+  // Fade in the spine equation.
+  [30.0, ()=>{ setChapter('第一章 · 工作'); showSpine(); }],
+  [34.0, ()=>{ setSub('工作，一直是两件事的乘积。'); }],
+
+  // ============ MUSCLE · 0:45 – 1:30 ============
+  // Light "muscle" in the spine. Transition to the graph. White curve rises.
+  [45.0, ()=>{ setSub(''); litTerm('muscle'); setChapter('肌肉 · 第一次外包');
+               sceneBlink(()=>{
+                 scene.mode='graph';
+                 scene.curveMuscle=0; scene.curveMind=0; scene.curveMult=0;
+                 tween('curveMuscle', 0, 1, 12);
+               });}],
+  [52.0, ()=>{ setSub('两百年前，肌肉是稀缺品。'); }],
+  [64.0, ()=>{ setSub('然后机器来了，<br>把它<em>外包了</em>。'); }],
+  [78.0, ()=>{ setSub('白线爬到顶，花了<em>两百年</em>。'); }],
+
+  // ============ MIND · 1:30 – 2:30 ============
+  // Keep graph on-screen. Just add the gold curve. No scene change.
+  [92.0,  ()=>{ setSub(''); litTerm('mind'); setChapter('心智 · 第二次外包');
+                tween('curveMind', 0, 1, 10); }],
+  [96.0,  ()=>{ setSub('现在，<em>同一张图</em>——<br>正在被重画一遍。'); }],
+  [112.0, ()=>{ setSub('这一次外包的是<em>心智</em>。'); }],
+  [126.0, ()=>{ setSub('但这一次——<em>不会用两百年</em>。'); }],
+
+  // ============ × · 2:20 – 3:10 ============
+  // Light the × symbol. Shade the area between the two curves.
+  [140.0, ()=>{ setSub(''); litTerm('mult'); setChapter('× · 相乘');
+                tween('curveMult', 0, 1, 6); }],
+  [146.0, ()=>{ setSub('<em>两样都变便宜</em>——<br>总价值不是相加，是<em>相乘</em>。'); }],
+  [162.0, ()=>{ setSub('每一个好奇心，<br>都能配上一支<em>研究团队</em>。'); }],
+  [178.0, ()=>{ setSub('听起来，是好事。'); }],
+
+  // ============ = · 3:10 – 4:10 ============
+  // Light "work" (the left side of the equation). Transition to bars.
+  // The point: total went up, but distribution is fat-tailed.
+  [190.0, ()=>{ setSub(''); litTerm('work'); setChapter('= · 代价');
+                sceneBlink(()=>{
+                  scene.mode='bars'; scene.barsT=0;
+                  tween('barsT', 0, 1, 10);
+                });}],
+  [196.0, ()=>{ setSub('<em>总量</em>的确涨了。<br>但<em>每个人</em>没有一起涨。'); }],
+  [212.0, ()=>{ setCite('恩格斯停滞 · Robert Allen'); }],
+  [214.0, ()=>{ setSub('工业革命前六十年：<br>产出 <b>+46%</b>，工资只 <b style="color:var(--red)">+12%</b>。'); }],
+  [230.0, ()=>{ setSub('整整一代人，<em>没赶上</em>。'); }],
+  [244.0, ()=>{ setCite(''); setSub('工业革命给了农工儿子<em>四十年</em>。<br>这一次，可能只给你<em>五年</em>。'); }],
+
+  // ============ ANSWER · 4:10 – 4:50 ============
+  // Dissolve equation. Three-item payoff.
+  [260.0, ()=>{ setSub(''); setChapter('答案 · 三件事');
+                sceneBlink(()=>{
+                  scene.mode='dark'; hideSpine();
+                  showAnswerItem(0);
+                }); }],
+  [265.0, ()=>{ showAnswerItem(1); }],
+  [270.0, ()=>{ showAnswerItem(2); }],
+
+  // ============ CLOSING · 4:55 – 5:00 ============
+  [285.0, ()=>{ setChapter(''); sceneBlink(()=>{
+                  hideAnswer(); scene.mode='dark';
+                  setMega('<em>你，在哪一侧？</em>'); }); }],
+  [297.0, ()=>{ setMega('<span style="font-size:1rem;color:var(--dim);letter-spacing:.3em">原文 · KONSTANTINE · 2026</span>'); }],
+];
+
+let cueIdx=0;
+function tick(){
+  if(startAt!=null){
+    updateTweens();
+    const e=elapsed();
+    while(cueIdx<cues.length && cues[cueIdx][0]<=e){
+      try{cues[cueIdx][1]();}catch(err){console.error(err);}
+      cueIdx++;
+    }
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+requestAnimationFrame(draw);
+
+/* ============================================================
+   AUDIO — same bell-based system as V1, minimal
+============================================================ */
+let audio={ctx:null,master:null,layers:{},reverb:null};
+function initAudio(){
+  if(audio.ctx) return;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  const ctx=new AC();
+  const master=ctx.createGain(); master.gain.value=0;
+  const hpf=ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=160; hpf.Q.value=.6;
+  const lp=ctx.createBiquadFilter();  lp.type='lowpass';   lp.frequency.value=6000; lp.Q.value=.4;
+  master.connect(hpf).connect(lp).connect(ctx.destination);
+
+  const conv=ctx.createConvolver();
+  const irLen=ctx.sampleRate*2.6;
+  const irBuf=ctx.createBuffer(2,irLen,ctx.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d=irBuf.getChannelData(ch);
+    for(let i=0;i<irLen;i++){
+      const tt=i/irLen;
+      d[i]=(Math.random()*2-1)*Math.pow(1-tt,2.8)*(1+Math.sin(tt*40)*.15);
+    }
+  }
+  conv.buffer=irBuf;
+  const revSend=ctx.createGain(); revSend.gain.value=.55;
+  const revRet =ctx.createGain(); revRet.gain.value=.9;
+  revSend.connect(conv).connect(revRet).connect(master);
+  audio.reverb=revSend; audio.ctx=ctx; audio.master=master;
+
+  const padGain=ctx.createGain(); padGain.gain.value=0;
+  const padFilt=ctx.createBiquadFilter(); padFilt.type='lowpass';
+  padFilt.frequency.value=1800; padFilt.Q.value=.9;
+  padGain.connect(padFilt).connect(master);
+  padGain.connect(revSend);
+  for(const f of [220, 261.63, 329.63, 392]){
+    const o1=ctx.createOscillator(); o1.type='triangle'; o1.frequency.value=f;
+    const o2=ctx.createOscillator(); o2.type='triangle'; o2.frequency.value=f*1.005;
+    const g=ctx.createGain(); g.gain.value=.16/4;
+    o1.connect(g); o2.connect(g); g.connect(padGain);
+    o1.start(); o2.start();
+  }
+  audio.layers={padGain};
+}
+function fadeTo(node,target,durSec){
+  if(!audio.ctx) return;
+  const now=audio.ctx.currentTime;
+  node.gain.cancelScheduledValues(now);
+  node.gain.setValueAtTime(node.gain.value,now);
+  node.gain.linearRampToValueAtTime(target, now+durSec);
+}
+function bellNote(freq,{t=0,gain=.1,dur=2.4,timbre='bell'}={}){
+  if(!audio.ctx) return;
+  const ctx=audio.ctx; const startT=ctx.currentTime+t;
+  const PARTIALS={
+    bell:[{r:1,amp:1,decay:1},{r:2.01,amp:.55,decay:.6},{r:3.03,amp:.32,decay:.4},{r:4.95,amp:.18,decay:.28},{r:7.1,amp:.08,decay:.18}],
+    glass:[{r:1,amp:1,decay:1},{r:2.76,amp:.4,decay:.5},{r:5.4,amp:.14,decay:.25}],
+    tine:[{r:1,amp:1,decay:1},{r:2,amp:.5,decay:.65},{r:4,amp:.2,decay:.35},{r:6,amp:.08,decay:.2}],
+  };
+  const partials=PARTIALS[timbre]||PARTIALS.bell;
+  const voice=ctx.createGain(); voice.gain.value=1;
+  voice.connect(audio.master); voice.connect(audio.reverb);
+  for(const p of partials){
+    const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=freq*p.r;
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(0,startT);
+    g.gain.linearRampToValueAtTime(gain*p.amp, startT+.008);
+    g.gain.exponentialRampToValueAtTime(.0001, startT+dur*p.decay);
+    o.connect(g).connect(voice);
+    o.start(startT); o.stop(startT+dur*p.decay+.1);
+  }
+}
+function chimeHit(variant='soft'){
+  if(!audio.ctx) return;
+  const A3=220,C5=523.25,E5=659.25,A5=880,C6=1046.5,E6=1318.5;
+  switch(variant){
+    case 'chord':
+      bellNote(A3*2,{gain:.07,dur:2.4,timbre:'glass'});
+      bellNote(E5,  {gain:.06,dur:2.2,t:.03,timbre:'glass'});
+      bellNote(C6,  {gain:.05,dur:2.0,t:.06,timbre:'bell'});
+      break;
+    case 'strike':
+      bellNote(A3,{gain:.10,dur:3.0,timbre:'tine'});
+      bellNote(E5,{gain:.09,dur:2.6,t:.04,timbre:'bell'});
+      bellNote(A5,{gain:.08,dur:2.4,t:.09,timbre:'bell'});
+      bellNote(C6,{gain:.07,dur:2.0,t:.14,timbre:'glass'});
+      break;
+    case 'swell':
+      bellNote(A3,  {gain:.11,dur:3.4,timbre:'tine'});
+      bellNote(E5,  {gain:.08,dur:2.8,t:.06,timbre:'bell'});
+      bellNote(A5,  {gain:.07,dur:2.6,t:.09,timbre:'bell'});
+      bellNote(E6,  {gain:.05,dur:2.0,t:.13,timbre:'glass'});
+      break;
+  }
+}
+
+let lastPhase=-1;
+function updateMusic(e){
+  if(!audio.ctx) return;
+  const L=audio.layers;
+  let p=0;
+  if(e<30) p=0;
+  else if(e<140) p=1;
+  else if(e<260) p=2;
+  else p=3;
+  if(p!==lastPhase){
+    lastPhase=p;
+    switch(p){
+      case 0: fadeTo(audio.master,.75,3); fadeTo(L.padGain,.08,6); break;
+      case 1: fadeTo(L.padGain,.11,6); break;
+      case 2: fadeTo(L.padGain,.12,5); break;
+      case 3: fadeTo(audio.master,0,12); break;
+    }
+  }
+}
+function musicTick(){
+  if(startAt!=null && audio.ctx) updateMusic(elapsed());
+  requestAnimationFrame(musicTick);
+}
+requestAnimationFrame(musicTick);
+
+document.getElementById('play').addEventListener('click',()=>{
+  document.getElementById('play').classList.add('hidden');
+  initAudio();
+  if(audio.ctx && audio.ctx.state==='suspended') audio.ctx.resume();
+  startAt = performance.now();
+  lastWallClock = performance.now();
+  document.getElementById('speedCtl').classList.add('show');
+});
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space' && startAt==null) document.getElementById('play').click();
+});
+
+/* ----- speed slider ----- */
+const speedRange = document.getElementById('speedRange');
+const speedVal   = document.getElementById('speedVal');
+function syncSpeed(){
+  SPEED = parseFloat(speedRange.value);
+  speedVal.textContent = SPEED.toFixed(2) + '×';
+}
+speedRange.addEventListener('input', syncSpeed);
+syncSpeed();
+</script>
+</body>
+</html>
